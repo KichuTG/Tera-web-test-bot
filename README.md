@@ -1,1 +1,1 @@
-# Tera-web-test-bot
+# Tera-bot
