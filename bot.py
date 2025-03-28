@@ -88,5 +88,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())  # Runs the bot
-    keep_alive()
-    main()
+    
