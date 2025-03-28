@@ -4,4 +4,4 @@ asyncio
 aiohttp
 requests
 beautifulsoup4
-aiogram
+aiogram>=3.0
