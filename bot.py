@@ -8,12 +8,16 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 import asyncio
+import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Replace with your Telegram bot token
 BOT_TOKEN = "7840816964:AAFQLW875DAEDjXSnljfiRCSsMgMcTRMnRg"
+
+# Terabox URL pattern
+TERABOX_PATTERN = r"https?://(?:\w+\.)?(terabox|1024terabox|freeterabox|teraboxapp|tera|teraboxlink|mirrorbox|nephobox|1024tera|momerybox|tibibox|terasharelink|teraboxshare|terafileshare)\.\w+"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,40 +52,41 @@ async def get_download_links(terabox_url):
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("Hello! Send me a Terabox URL, and I'll fetch the download links for you.")
+    await message.answer("Hello! Send me a valid Terabox URL, and I'll fetch the download links for you.")
 
 @dp.message(F.text)
 async def fetch_links(message: types.Message):
     terabox_url = message.text.strip()
 
-    if "terabox.com" not in terabox_url:
-        await message.reply("Please send a valid Terabox URL!")
+    # Validate the URL using regex
+    if not re.match(TERABOX_PATTERN, terabox_url):
+        await message.reply("❌ Invalid Terabox URL! Please send a valid link.")
         return
 
-    waiting_message = await message.reply("Processing your request. Please wait 10 seconds...")
+    waiting_message = await message.reply("⏳ Processing your request. Please wait 10 seconds...")
 
     await asyncio.sleep(10)  # Wait for 10 seconds before fetching the links
 
     download_video_link, fast_download_link = await get_download_links(terabox_url)
 
     if not download_video_link and not fast_download_link:
-        await waiting_message.edit_text("Failed to get download links. Please try again later.")
+        await waiting_message.edit_text("⚠️ Failed to get download links. Please try again later.")
         return
 
     keyboard = InlineKeyboardMarkup()
     if download_video_link:
-        keyboard.add(InlineKeyboardButton("Download Video", url=download_video_link))
+        keyboard.add(InlineKeyboardButton("📥 Download Video", url=download_video_link))
     if fast_download_link:
-        keyboard.add(InlineKeyboardButton("Fast Download", url=fast_download_link))
+        keyboard.add(InlineKeyboardButton("⚡ Fast Download", url=fast_download_link))
 
-    await waiting_message.edit_text("Here are your download links:", reply_markup=keyboard)
+    await waiting_message.edit_text("✅ Here are your download links:", reply_markup=keyboard)
 
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    await bot.delete_webhook(drop_pending_updates=True)  # Ensures old updates don't cause errors
+    await dp.start_polling(bot)  # Starts bot in polling mode
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())  # Runs the bot
  if __name__ == "__main__":
     keep_alive()
     main()
