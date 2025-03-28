@@ -7,9 +7,9 @@ from web import keep_alive
 import logging
 import requests
 from bs4 import BeautifulSoup
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils import executor
 
 # Replace with your Telegram bot token
 BOT_TOKEN = "7840816964:AAFQLW875DAEDjXSnljfiRCSsMgMcTRMnRg"
@@ -17,10 +17,10 @@ BOT_TOKEN = "7840816964:AAFQLW875DAEDjXSnljfiRCSsMgMcTRMnRg"
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 # Function to get download links from yt.savetube.me
-def get_download_links(terabox_url):
+async def get_download_links(terabox_url):
     try:
         url = "https://yt.savetube.me/terabox-downloader"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -45,11 +45,11 @@ def get_download_links(terabox_url):
         logging.error(f"Error fetching links: {e}")
         return None, None
 
-@dp.message_handler(commands=["start"])
+@dp.message(commands=["start"])
 async def start(message: types.Message):
-    await message.reply("Send me a Terabox URL, and I'll get the download links for you!")
+    await message.answer("Hello! Send me a Terabox URL, and I'll fetch the download links for you.")
 
-@dp.message_handler()
+@dp.message()
 async def fetch_links(message: types.Message):
     terabox_url = message.text.strip()
 
@@ -57,12 +57,14 @@ async def fetch_links(message: types.Message):
         await message.reply("Please send a valid Terabox URL!")
         return
 
-    await message.reply("Fetching download links, please wait...")
+    waiting_message = await message.reply("Processing your request. Please wait 10 seconds...")
 
-    download_video_link, fast_download_link = get_download_links(terabox_url)
+    await asyncio.sleep(10)  # Wait for 10 seconds before fetching the links
+
+    download_video_link, fast_download_link = await get_download_links(terabox_url)
 
     if not download_video_link and not fast_download_link:
-        await message.reply("Failed to get download links. Please try again later.")
+        await waiting_message.edit_text("Failed to get download links. Please try again later.")
         return
 
     keyboard = InlineKeyboardMarkup()
@@ -71,7 +73,11 @@ async def fetch_links(message: types.Message):
     if fast_download_link:
         keyboard.add(InlineKeyboardButton("Fast Download", url=fast_download_link))
 
-    await message.reply("Here are your download links:", reply_markup=keyboard)
+    await waiting_message.edit_text("Here are your download links:", reply_markup=keyboard)
+
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
