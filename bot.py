@@ -24,14 +24,16 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Function to get download links from yt.savetube.me
-async def get_download_links(terabox_url):
-    try:
-        url = "https://yt.savetube.me/terabox-downloader"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        data = {"url": terabox_url}
+# Function to get download links from yt.savetube.me (with retries)
+async def get_download_links(terabox_url, max_retries=12, delay=5):
+    """Tries to get the download links multiple times, waiting for them to be available."""
+    url = "https://yt.savetube.me/terabox-downloader"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    data = {"url": terabox_url}
 
+    for attempt in range(max_retries):
         response = requests.post(url, headers=headers, data=data)
+
         if response.status_code != 200:
             return None, None
 
@@ -41,14 +43,15 @@ async def get_download_links(terabox_url):
         download_video_btn = soup.find("a", string="Download video")
         fast_download_btn = soup.find("a", string="Fast Download")
 
-        download_video_link = download_video_btn["href"] if download_video_btn else None
-        fast_download_link = fast_download_btn["href"] if fast_download_btn else None
+        if download_video_btn or fast_download_btn:
+            return (
+                download_video_btn["href"] if download_video_btn else None,
+                fast_download_btn["href"] if fast_download_btn else None
+            )
 
-        return download_video_link, fast_download_link
+        await asyncio.sleep(delay)  # Wait before retrying
 
-    except Exception as e:
-        logging.error(f"Error fetching links: {e}")
-        return None, None
+    return None, None  # Return None if links never appear
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
@@ -63,9 +66,7 @@ async def fetch_links(message: types.Message):
         await message.reply("❌ Invalid Terabox URL! Please send a valid link.")
         return
 
-    waiting_message = await message.reply("⏳ Processing your request. Please wait 10 seconds...")
-
-    await asyncio.sleep(10)  # Wait for 10 seconds before fetching the links
+    waiting_message = await message.reply("⏳ Processing your request. This may take up to **1 minute**...")
 
     download_video_link, fast_download_link = await get_download_links(terabox_url)
 
