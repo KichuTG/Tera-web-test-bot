@@ -12,80 +12,106 @@ import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import asyncio
+import re
+import requests
+from bs4 import BeautifulSoup
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
+from aiogram.filters import CommandStart
+import logging
 
-# Replace with your Telegram bot token
-BOT_TOKEN = "7840816964:AAFQLW875DAEDjXSnljfiRCSsMgMcTRMnRg"
+API_TOKEN = "7840816964:AAFQLW875DAEDjXSnljfiRCSsMgMcTRMnRg"
 
-# Terabox URL pattern
-TERABOX_PATTERN = r"https?://(?:\w+\.)?(terabox|1024terabox|freeterabox|teraboxapp|tera|teraboxlink|mirrorbox|nephobox|1024tera|momerybox|tibibox|terasharelink|teraboxshare|terafileshare)\.\w+"
-
-logging.basicConfig(level=logging.INFO)
-
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# Function to get download links from yt.savetube.me (with retries)
-async def get_download_links(terabox_url, max_retries=12, delay=5):
-    """Tries to get the download links multiple times, waiting for them to be available."""
-    url = "https://yt.savetube.me/terabox-downloader"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    data = {"url": terabox_url}
+# Regex for Terabox links
+TERABOX_PATTERN = re.compile(
+    r"https?://(?:\w+\.)?(terabox|1024terabox|freeterabox|teraboxapp|tera|teraboxlink|mirrorbox|nephobox|1024tera|momerybox|tibibox|terasharelink|teraboxshare|terafileshare)\.\w+"
+)
 
-    for attempt in range(max_retries):
-        response = requests.post(url, headers=headers, data=data)
+# Function to get download links from the website
+def get_download_links(terabox_url):
+    session = requests.Session()
+    downloader_url = "https://yt.savetube.me/terabox-downloader"
 
-        if response.status_code != 200:
-            return None, None
+    # Step 1: Get the website's session & form data
+    response = session.get(downloader_url)
+    if response.status_code != 200:
+        return "Failed to connect to the downloader website."
 
-        soup = BeautifulSoup(response.text, "html.parser")
+    # Parse the page to find the form token (if needed)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-        # Find the "Download video" and "Fast Download" buttons
-        download_video_btn = soup.find("a", string="Download video")
-        fast_download_btn = soup.find("a", string="Fast Download")
+    # Find the form action URL (if it's a POST request)
+    form_action = downloader_url  # Assuming it's the same URL
 
-        if download_video_btn or fast_download_btn:
-            return (
-                download_video_btn["href"] if download_video_btn else None,
-                fast_download_btn["href"] if fast_download_btn else None
-            )
+    # Step 2: Submit the form with the Terabox link
+    form_data = {
+        "url": terabox_url,  # The field where we paste the link
+    }
+    
+    submit_response = session.post(form_action, data=form_data)
+    
+    if submit_response.status_code != 200:
+        return "Error submitting the link to the downloader."
 
-        await asyncio.sleep(delay)  # Wait before retrying
+    # Step 3: Wait for processing
+    asyncio.sleep(10)  # Wait for the site to process
 
-    return None, None  # Return None if links never appear
+    # Step 4: Parse the download page to extract links
+    soup = BeautifulSoup(submit_response.text, "html.parser")
 
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    await message.answer("Hello! Send me a valid Terabox URL, and I'll fetch the download links for you.")
+    # Extract "Download video" and "Fast Download" buttons
+    download_links = {}
+    for button in soup.find_all("a"):
+        text = button.text.strip()
+        href = button.get("href")
+        if "Download video" in text:
+            download_links["Download video"] = href
+        elif "Fast Download" in text:
+            download_links["Fast Download"] = href
 
-@dp.message(F.text)
-async def fetch_links(message: types.Message):
-    terabox_url = message.text.strip()
+    if not download_links:
+        return "Failed to retrieve download links. Try again later."
 
-    # Validate the URL using regex
-    if not re.match(TERABOX_PATTERN, terabox_url):
-        await message.reply("❌ Invalid Terabox URL! Please send a valid link.")
+    return download_links
+
+
+# Telegram bot handlers
+@dp.message(CommandStart())
+async def start(message: Message):
+    await message.answer("Send me a Terabox link, and I'll fetch the download links for you!")
+
+@dp.message()
+async def process_terabox_link(message: Message):
+    url_match = TERABOX_PATTERN.search(message.text)
+    if not url_match:
+        await message.answer("Please send a valid Terabox link.")
         return
 
-    waiting_message = await message.reply("⏳ Processing your request. This may take up to **1 minute**...")
+    terabox_url = url_match.group()
+    
+    await message.answer("Processing your request... Please wait 10 seconds.")
 
-    download_video_link, fast_download_link = await get_download_links(terabox_url)
+    # Fetch the download links
+    download_links = get_download_links(terabox_url)
 
-    if not download_video_link and not fast_download_link:
-        await waiting_message.edit_text("⚠️ Failed to get download links. Please try again later.")
-        return
+    # Send response
+    if isinstance(download_links, dict):
+        response_text = "Here are your download links:\n\n"
+        for name, link in download_links.items():
+            response_text += f"➡️ [{name}]({link})\n"
+        await message.answer(response_text, parse_mode="Markdown")
+    else:
+        await message.answer(download_links)
 
-    keyboard = InlineKeyboardMarkup()
-    if download_video_link:
-        keyboard.add(InlineKeyboardButton("📥 Download Video", url=download_video_link))
-    if fast_download_link:
-        keyboard.add(InlineKeyboardButton("⚡ Fast Download", url=fast_download_link))
 
-    await waiting_message.edit_text("✅ Here are your download links:", reply_markup=keyboard)
-
+# Start bot
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)  # Ensures old updates don't cause errors
-    await dp.start_polling(bot)  # Starts bot in polling mode
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())  # Runs the bot
-    
+    asyncio.run(main())
