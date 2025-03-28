@@ -8,7 +8,8 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 import asyncio
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Replace with your Telegram bot token
@@ -45,11 +46,11 @@ async def get_download_links(terabox_url):
         logging.error(f"Error fetching links: {e}")
         return None, None
 
-@dp.message(commands=["start"])
+@dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer("Hello! Send me a Terabox URL, and I'll fetch the download links for you.")
 
-@dp.message()
+@dp.message(F.text)
 async def fetch_links(message: types.Message):
     terabox_url = message.text.strip()
 
